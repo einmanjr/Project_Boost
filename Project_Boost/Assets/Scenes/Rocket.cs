@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using UnityEngine.SceneManagement;
 
  
@@ -20,8 +21,12 @@ public class Rocket : MonoBehaviour
     Rigidbody rigidBody;
     AudioSource audioSource;
 
+
     enum State { Alive, Dying, Transcending}
     State state = State.Alive;
+
+    bool collisionsDisabled = false;
+    
     
     void Start()
     {
@@ -29,19 +34,23 @@ public class Rocket : MonoBehaviour
         audioSource = GetComponent<AudioSource>();
     }
 
-    // Update is called once per frame
-    void Update()
+    
+    void Update()                           // Update is called once per frame
     {
         if (state == State.Alive)
         {
             RespondToThrustInput();
             RespondToRotateInput();
+            DebugMode();
         }
     }
 
+
+
+
     void OnCollisionEnter(Collision collision)
     {
-        if (state != State.Alive) { return; } // ignore collisions on death
+        if (state != State.Alive || collisionsDisabled == true) { return; } // ignore collisions for debugging
 
         switch (collision.gameObject.tag)
         {
@@ -62,10 +71,16 @@ public class Rocket : MonoBehaviour
 
     }
 
+
+
+
+    #region Atomic Code
+
     private void successSequence()
     {
         state = State.Transcending;
         audioSource.Stop();
+        mainEngineParticles.Stop();
         audioSource.PlayOneShot(success);
         successParticles.Play();
         Invoke("LoadNextLevel", levelLoadDelay);
@@ -78,11 +93,15 @@ public class Rocket : MonoBehaviour
         mainEngineParticles.Stop();
         deathParticles.Play();
         audioSource.PlayOneShot(death);
-        Invoke("LoadFirstLevel", levelLoadDelay);
+        Invoke("ReloadCurrentScene", levelLoadDelay);
         //parameterize time
         //TODO -- kill player
     }
-
+    private void ReloadCurrentScene()
+    {
+        int currentSceneIndex = SceneManager.GetActiveScene().buildIndex;
+        SceneManager.LoadScene(currentSceneIndex);
+    }
     private void LoadFirstLevel()
     {
         SceneManager.LoadScene(0);
@@ -90,10 +109,23 @@ public class Rocket : MonoBehaviour
 
     private void LoadNextLevel()
     {
-        SceneManager.LoadScene(1); //TODO allow for more than 2 levels
+        int currentSceneIndex = SceneManager.GetActiveScene().buildIndex;
+        int nextSceneIndex = currentSceneIndex + 1;
+        RestartGame(currentSceneIndex);
+        print(currentSceneIndex);
+        SceneManager.LoadScene(nextSceneIndex);
+
+
     }
 
-    #region controls
+    private void RestartGame(int currentSceneIndex)
+    {
+        if (currentSceneIndex == SceneManager.sceneCountInBuildSettings - 1)
+        {
+            LoadFirstLevel();
+        }
+    }
+
     private void RespondToThrustInput()
     {
         if (Input.GetKey(KeyCode.Space))
@@ -102,9 +134,14 @@ public class Rocket : MonoBehaviour
         }
         else
         {
-            audioSource.Stop();
-            mainEngineParticles.Stop();
+            StopApplyingThrust();
         }
+    }
+
+    private void StopApplyingThrust()
+    {
+        audioSource.Stop();
+        mainEngineParticles.Stop();
     }
 
     private void ApplyThrust()
@@ -120,30 +157,56 @@ public class Rocket : MonoBehaviour
 
     void RespondToRotateInput()
     {
-        //Thrusting();
-
-        rigidBody.freezeRotation = true; // take manual control of rotation;
-
-        
+        rigidBody.angularVelocity = Vector3.zero;    // remove rotation due to physics
         float rotationThisFrame = rcsThrust * Time.deltaTime;
 
-
-        if (Input.GetKey(KeyCode.D)) //separate statement- can simulaneous directions
+        if (Input.GetKey(KeyCode.D)) //separate statements- can simulaneous directions
         {
             
             print("Rotate Left");
             transform.Rotate(Vector3.forward * rotationThisFrame);
         }
 
-        if (Input.GetKey(KeyCode.F))
+        if (Input.GetKey(KeyCode.F)) //separate statements- can simulaneous directions
         {
             print("Rotate Right");
             transform.Rotate(Vector3.back * rotationThisFrame);
         }
+    }
 
-        rigidBody.freezeRotation = false; // resume physics of rotation;
+    private void CollisionsToggled()
+    {
+        if (collisionsDisabled == false)
+        {
+            print("Collisions Disabled");
+            collisionsDisabled = true;
+        }
+        else
+        {
+            print("Collisions Enabled");
+            collisionsDisabled = false;
+        }
+    }
 
+    private void DebugMode()
+    {
+        if (Debug.isDebugBuild)
+        {
+            RespondToDebugKeys();
+        }
+    }
 
+    private void RespondToDebugKeys()
+    {
+        if (Input.GetKeyDown(KeyCode.L))
+        {
+            LoadNextLevel();
+        }
+        else if (Input.GetKeyDown(KeyCode.C))
+        {
+            CollisionsToggled(); // collisionsDisabled = !collisionsDisabled;
+
+        }
     }
 
     #endregion
